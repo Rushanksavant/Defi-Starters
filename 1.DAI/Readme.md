@@ -1,0 +1,6 @@
+- First deploy DAI_SM
+- Now Deploy MyDefiProject by passing deployed DAI_SM address
+- Goto DAI_SM and call facet function- faucet(MyDefiProject, 100). This will send 100 Dai tokens to MyDefiProject
+- call foo function in MyDefiProject for any other address
+- this will send DAI token from MyDefiProject to other address
+- use balanceOf function in DAI.sol to get token balance for each address
