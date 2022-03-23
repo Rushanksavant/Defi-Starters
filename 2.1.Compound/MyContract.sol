@@ -98,10 +98,56 @@ contract MyContract {
             // normal circumstance - liquidity > 0 and shortfall == 0
             // liquidity > 0 means account can borrow up to `liquidity`
             // shortfall > 0 is subject to liquidation, you borrowed over limit
-        return(liquidity, shortfall);
+        return(liquidity, shortfall); // liquidity is given in dollars(if not 0)
     }
 
 
-    //
+    // To get the open price feed (USD price of token we are willing to borrow)
+    function getPriceFeed(address _cToken) external view returns(uint) {
+        return pricefeed.getUnderlyingPrice(_cToken); // price of target token
+    }
+    // Note: liquidity/pricefeed = amount of token(for which we have entered pricefeed) we can borrow
 
+
+    // To enter market and borrow the token
+    function borrow(address _cTokenAddress, uint _decimal) external {
+        // enter the market
+        address[] memory cTokens = new address[](1); // cTokens will store the list of cToken(s) addresses we need to borrow
+        cTokens[0] = _cTokenAddress; // storing our tarhet cToken address in cTokens
+        uint[] memory errorCodes = comptroller.enterMarkets(cTokens); // comptroller.enterMarkets(cTokens) returns error code, we are storing it in an array 
+        require(errorCodes[0] == 0, "You can't enter the market"); // checking if the error code was 0, if not then there was some error
+        
+        // check liquidity
+        (uint error, uint liquidity, uint shortfall) = comptroller.getAccountLiquidity(address(this)); // same as before
+        require(error == 0, "Error");
+        require(liquidity > 0, "Liquidity == 0");
+        require(shortfall == 0, "Shortfall > 0");
+
+        // calculate max borrow limit
+        uint price = pricefeed.getUnderlyingPrice(_cTokenAddress);
+        uint maxBorrow = (liquidity * (10 ** _decimal)) / price;
+        require(maxBorrow > 0, "maxBorrow is 0");
+
+        // borrow 50% of max borrow limit(we can borrow all of it, but that will reduce our liquidity)
+        uint amount = (maxBorrow*50) / 100;
+        require(CErc20(_cTokenAddress).borrow(amount) == 0, "Borrow failed"); // borrow() function of cTOken contract returns error-codes
+    }
+
+    // To get the balance of the borrowed asset
+    function getBorrowBalance(address _cTokenBorrowed) public returns(uint) { // not view, because the function used inside is not view
+        return CErc20(_cTokenBorrowed).borrowBalanceCurrent(address(this)); // returns the amount of _cTokenBorrowed borrowed by this contract address
+    } // Note: we can use a static call to get this information, and not really use this defined function
+
+
+    // To get the borrow rate per block
+    function getBorrowRatePerBlock(address _cTokenBorrowed) external view returns(uint) {
+        return CErc20(_cTokenBorrowed).borrowRatePerBlock();
+    }
+
+
+    // To repay the borrow
+    function repay(address tokenBorrowed, address cTokenBorrowed, uint amount) external {
+        IERC20(tokenBorrowed).approve(cTokenBorrowed, amount); // allowing cToken contract to take amount funds from this contract address
+        require(CErc20(cTokenBorrowed).repayBorrow(amount) == 0, "Repay failed"); // returns error code
+    } // Note: for transfering all the borrowed funds, amount = -1
 }
